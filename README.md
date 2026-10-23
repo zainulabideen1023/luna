@@ -2,7 +2,7 @@
 
 *Talk to the moon.* Luna is a minimal, private notebook that feels like texting yourself. Send small thoughts as they come, then look back for patterns.
 
-**Live app:** https://zainulabideen1023.github.io/Luna/
+**Live app:** https://zainulabideen1023.github.io/luna/
 
 ## Features
 
