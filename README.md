@@ -55,9 +55,6 @@ Luna counts things; it doesn't understand them. Tone uses a small word list, so 
 | `CHANGELOG.md` | What changed in each version |
 | `DECISIONS.md` | Why things are built the way they are |
 
-## Updating the app
-
-When you change `index.html`, also change the version in `sw.js` (for example `luna-v2` to `luna-v3`). Otherwise phones keep showing the old cached version.
 
 ## Roadmap
 
