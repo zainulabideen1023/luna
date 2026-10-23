@@ -24,6 +24,17 @@
 1. Open the live app in Chrome.
 2. Tap the menu, then **Install app** (or **Add to Home screen**).
 
+## Install on iPhone or iPad
+
+1. Open the live app in **Safari**. (Other browsers can work on iOS 16.4 and later, but Safari is the most reliable.)
+2. Tap the **Share** button (the square with an arrow pointing up).
+3. Scroll down and tap **Add to Home Screen**, then **Add**.
+4. Open Luna from the new home screen icon.
+
+Notes for iOS:
+- The installed app keeps its own storage, separate from Safari. If you used Luna in a Safari tab first, back up there and restore inside the installed app.
+- iOS needs a PNG icon, and Luna only ships an SVG, so the home screen icon may show a plain tile instead of the moon. A PNG icon is planned. This hasn't been tested on an iPhone yet.
+
 ## Back up and restore
 
 - **Backup → Copy backup**, then paste it somewhere safe such as a note to yourself.
