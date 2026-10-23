@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Luna</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#3B2F8F">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#ECE9F5;--surface:#FFFFFF;--ink:#1E1838;--mute:#6F688C;--bubble:#3B2F8F;--bubble-ink:#FFFFFF;--line:#D9D4EA;--accent:#F2B84B;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#13101F;--surface:#1D1830;--ink:#EEEAFB;--mute:#9189B5;--bubble:#7A6CF0;--bubble-ink:#0F0B22;--line:#2E2848;--accent:#F2B84B;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#13101F;--surface:#1D1830;--ink:#EEEAFB;--mute:#9189B5;--bubble:#7A6CF0;--bubble-ink:#0F0B22;--line:#2E2848;--accent:#F2B84B;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;height:100%}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
+h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.02em}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px}
+.tabs button{border:0;background:none;color:var(--mute);font:600 14px inherit;font-family:inherit;padding:6px 11px;border-radius:999px}
+.tabs button[aria-selected="true"]{background:var(--bubble);color:var(--bubble-ink)}
+main{flex:1;overflow-y:auto;padding:8px 16px 12px;display:flex;flex-direction:column}
+.day{align-self:center;color:var(--mute);font-size:12px;margin:14px 0 6px}
+.msg{align-self:flex-end;max-width:82%;margin:3px 0;text-align:right}
+.bubble{display:inline-block;background:var(--bubble);color:var(--bubble-ink);padding:9px 14px;border-radius:20px 20px 6px 20px;font-size:16px;line-height:1.35;text-align:left;white-space:pre-wrap;word-break:break-word}
+.meta{font-size:11px;color:var(--mute);margin:2px 4px 0;display:none}
+.msg.open .meta{display:block}
+.meta button{border:0;background:none;color:var(--mute);text-decoration:underline;font:inherit;padding:0 0 0 8px}
+.empty{margin:auto;text-align:center;color:var(--mute);max-width:260px;line-height:1.45}
+.empty b{display:block;color:var(--ink);font-size:18px;margin-bottom:6px}
+form,.composer{display:flex;gap:8px;align-items:flex-end;padding:8px 12px 12px;border-top:1px solid var(--line);background:var(--bg)}
+textarea{flex:1;resize:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:10px 14px;font:16px/1.3 inherit;font-family:inherit;max-height:120px}
+textarea:focus{outline:2px solid var(--bubble);outline-offset:1px}
+.send{width:42px;height:42px;border-radius:50%;border:0;background:var(--bubble);color:var(--bubble-ink);font-size:20px;font-weight:800;flex:none}
+.send:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hidden{display:none!important}
+.range{display:flex;gap:6px;margin-bottom:14px}
+.range button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 12px;font:600 13px inherit;font-family:inherit}
+.range button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px}
+.stat b{display:block;font-size:24px;font-weight:800}
+.stat span{font-size:12px;color:var(--mute)}
+h2{font-size:15px;margin:18px 0 8px}
+.words{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink)}
+.bars{display:flex;align-items:flex-end;gap:3px;height:70px}
+.bars i{flex:1;background:var(--bubble);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:4px}
+.note{color:var(--mute);font-size:13px;line-height:1.45;margin-top:18px}
+.tone{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line)}
+.tone i{display:block}.tone .u{background:var(--accent)}.tone .f{background:var(--line)}.tone .d{background:var(--bubble)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:6px}
+.insight{margin:8px 0 0;line-height:1.4}
+.old{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;line-height:1.4}
+.old small{display:block;color:var(--mute);margin-bottom:4px}
+.recur{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Luna</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-thread" aria-selected="true">Thread</button>
+    <button role="tab" id="t-patterns" aria-selected="false">Patterns</button>
+    <button role="tab" id="t-backup" aria-selected="false">Backup</button>
+  </div>
+</header>
+
+<main id="thread" aria-live="polite"></main>
+<main id="patterns" class="hidden"></main>
+<main id="backup" class="hidden"></main>
+
+<div class="composer" id="composer">
+  <textarea id="input" rows="1" placeholder="Tell Luna what’s on your mind" aria-label="Write a thought"></textarea>
+  <button class="send" id="send" aria-label="Save thought">↑</button>
+</div>
+
+<script>
+var KEY='mindchat:thoughts';
+var thoughts=[];
+try{var raw=localStorage.getItem(KEY);if(raw)thoughts=JSON.parse(raw)||[]}catch(e){thoughts=[]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(thoughts))}catch(e){}}
+
+var $=function(id){return document.getElementById(id)};
+var thread=$('thread'),patterns=$('patterns'),input=$('input'),composer=$('composer');
+var rangeDays=7;
+
+function dayLabel(ts){
+  var d=new Date(ts),t=new Date(),y=new Date();y.setDate(t.getDate()-1);
+  if(d.toDateString()===t.toDateString())return 'Today';
+  if(d.toDateString()===y.toDateString())return 'Yesterday';
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+}
+function timeLabel(ts){return new Date(ts).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}
+
+function renderThread(){
+  thread.innerHTML='';
+  if(!thoughts.length){
+    thread.innerHTML='<div class="empty"><b>Talk to the moon.</b>Send the small thoughts as they come. No folders, no titles. Luna keeps them, and patterns show up later.</div>';
+    return;
+  }
+  var last='';
+  thoughts.forEach(function(t){
+    var dl=dayLabel(t.ts);
+    if(dl!==last){var s=document.createElement('div');s.className='day';s.textContent=dl;thread.appendChild(s);last=dl}
+    var m=document.createElement('div');m.className='msg';
+    var b=document.createElement('div');b.className='bubble';b.textContent=t.text;
+    var meta=document.createElement('div');meta.className='meta';meta.textContent=timeLabel(t.ts);
+    var del=document.createElement('button');del.textContent='Delete';
+    del.onclick=function(e){e.stopPropagation();thoughts=thoughts.filter(function(x){return x.id!==t.id});save();renderThread()};
+    meta.appendChild(del);
+    b.onclick=function(){m.classList.toggle('open')};
+    m.appendChild(b);m.appendChild(meta);thread.appendChild(m);
+  });
+  thread.scrollTop=thread.scrollHeight;
+}
+
+function addThought(){
+  var text=input.value.trim();if(!text)return;
+  thoughts.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,6),text:text,ts:Date.now()});
+  save();input.value='';input.style.height='auto';renderThread();input.focus();
+}
+$('send').onclick=addThought;
+input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&window.matchMedia('(hover:hover)').matches){e.preventDefault();addThought()}});
+input.addEventListener('input',function(){input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px'});
+
+var STOP=new Set('the a an and or but if then so to of in on at for with from by is are was were be been being it its this that these those i me my mine we our you your he she they them his her their not no yes do does did done have has had will would can could should just like get got really very about into out up down over than too also what when where who how why which there here as am im ive dont cant its thats because maybe still more some any all one much want need think feel know going gonna thing things'.split(' '));
+
+function streak(){
+  var days={};thoughts.forEach(function(t){days[new Date(t.ts).toDateString()]=1});
+  var n=0,d=new Date();
+  if(!days[d.toDateString()])d.setDate(d.getDate()-1);
+  while(days[d.toDateString()]){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+
+function renderPatterns(){
+  var since=rangeDays?Date.now()-rangeDays*864e5:0;
+  var set=thoughts.filter(function(t){return t.ts>=since});
+  var html='<div class="range">'+[[7,'7 days'],[30,'30 days'],[0,'All time']].map(function(r){return '<button data-r="'+r[0]+'" aria-pressed="'+(rangeDays===r[0])+'">'+r[1]+'</button>'}).join('')+'</div>';
+  if(set.length<3){
+    html+='<div class="empty" style="margin-top:40px"><b>Not enough yet.</b>Send a few more thoughts and your patterns will appear here.</div>';
+    patterns.innerHTML=html;wire();return;
+  }
+  var hours=new Array(24).fill(0),freq={},words=0;
+  set.forEach(function(t){
+    hours[new Date(t.ts).getHours()]++;
+    var ws=t.text.toLowerCase().replace(/[^a-z\u00c0-\u024f'\s]/g,' ').split(/\s+/).filter(Boolean);
+    words+=ws.length;
+    var seen={};
+    ws.forEach(function(w){w=w.replace(/'/g,'');if(w.length<4||STOP.has(w)||seen[w])return;seen[w]=1;freq[w]=(freq[w]||0)+1});
+  });
+  var peak=hours.indexOf(Math.max.apply(null,hours));
+  var peakLabel=new Date(2000,0,1,peak).toLocaleTimeString(undefined,{hour:'numeric'});
+  var top=Object.keys(freq).filter(function(w){return freq[w]>1}).sort(function(a,b){return freq[b]-freq[a]}).slice(0,12);
+  var maxH=Math.max.apply(null,hours);
+
+  html+='<div class="stats"><div class="stat"><b>'+set.length+'</b><span>thoughts</span></div><div class="stat"><b>'+streak()+'</b><span>day streak</span></div><div class="stat"><b>'+Math.round(words/set.length)+'</b><span>words each</span></div></div>';
+  html+='<h2>You think most around '+peakLabel+'</h2><div class="bars" aria-hidden="true">'+hours.map(function(h){return '<i style="height:'+Math.max(3,h/maxH*100)+'%"></i>'}).join('')+'</div><div class="axis"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>';
+  html+='<h2>Words that keep coming back</h2>';
+  html+=top.length?'<div class="words">'+top.map(function(w){return '<span class="chip">'+w+' · '+freq[w]+'</span>'}).join('')+'</div>':'<div class="note" style="margin-top:0">No repeats yet. Recurring words will show up here.</div>';
+  html+=extras(set);html+='<p class="note">All of this is counted on your phone from your own words. Tone is a simple word-list estimate, so treat it as a rough hint.</p>';
+  patterns.innerHTML=html;wire();
+}
+var POS=new Set('good great happy love loved excited grateful glad proud calm hope hopeful fun enjoy enjoyed nice better best win wonderful beautiful relaxed peaceful motivated inspired thankful amazing awesome laugh curious'.split(' '));
+var NEG=new Set('bad sad angry anxious anxiety worried worry stressed stress tired exhausted lonely afraid scared fear hate hated annoyed frustrated overwhelmed stuck guilty regret ashamed worse worst hurt cry crying hard difficult confused doubt dread burnout drained'.split(' '));
+function clean(t){return t.toLowerCase().replace(/[^a-z\u00c0-\u024f\s]/g,' ').split(/\s+/).filter(Boolean)}
+function tone(t){var s=0;clean(t).forEach(function(w){if(POS.has(w))s++;else if(NEG.has(w))s--});return s}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function extras(set){
+  var h='',sc=set.map(function(t){return tone(t.text)});
+  var up=sc.filter(function(x){return x>0}).length,dn=sc.filter(function(x){return x<0}).length,fl=set.length-up-dn;
+  h+='<h2>Tone</h2><div class="tone"><i class="u" style="flex:'+up+'"></i><i class="f" style="flex:'+fl+'"></i><i class="d" style="flex:'+dn+'"></i></div>';
+  h+='<div class="legend"><span>'+up+' upbeat</span><span>'+fl+' neutral</span><span>'+dn+' heavy</span></div>';
+  if(set.length>=6){
+    var mid=Math.floor(set.length/2),avg=function(a){return a.reduce(function(x,y){return x+y},0)/a.length};
+    var a=avg(sc.slice(0,mid)),b=avg(sc.slice(mid)),d=b-a;
+    h+='<p class="insight">'+(Math.abs(d)<0.15?'Your tone has stayed steady across this stretch.':d>0?'Your recent thoughts lean more upbeat than your earlier ones.':'Your recent thoughts lean heavier than your earlier ones.')+'</p>';
+  }
+  var q=set.filter(function(t){return t.text.indexOf('?')>-1}).length;
+  h+='<p class="insight">'+Math.round(q/set.length*100)+'% of your thoughts are questions.</p>';
+  var days={},pairs={};
+  set.forEach(function(t){
+    var dk=new Date(t.ts).toDateString(),ws=clean(t.text),seen={};
+    ws.forEach(function(w){w=w.replace(/'/g,'');if(w.length<4||STOP.has(w))return;(days[w]=days[w]||{})[dk]=1});
+    for(var i=0;i<ws.length-1;i++){
+      var x=ws[i],y=ws[i+1];
+      if(x.length<3||y.length<3||STOP.has(x)||STOP.has(y))continue;
+      var p=x+' '+y;if(!seen[p]){seen[p]=1;pairs[p]=(pairs[p]||0)+1}
+    }
+  });
+  var loops=Object.keys(days).map(function(w){return [w,Object.keys(days[w]).length]}).filter(function(r){return r[1]>=3}).sort(function(a,b){return b[1]-a[1]}).slice(0,6);
+  if(loops.length){h+='<h2>Loops: topics on 3+ different days</h2>'+loops.map(function(r){return '<div class="recur"><span>'+r[0]+'</span><span>'+r[1]+' days</span></div>'}).join('')}
+  var ph=Object.keys(pairs).filter(function(p){return pairs[p]>1}).sort(function(a,b){return pairs[b]-pairs[a]}).slice(0,8);
+  if(ph.length){h+='<h2>Phrases you repeat</h2><div class="words">'+ph.map(function(p){return '<span class="chip">'+p+' · '+pairs[p]+'</span>'}).join('')+'</div>'}
+  var old=thoughts.filter(function(t){return Date.now()-t.ts>3*864e5});
+  if(old.length){
+    var o=old[Math.floor(Math.random()*old.length)],n=Math.round((Date.now()-o.ts)/864e5);
+    h+='<h2>From your past</h2><div class="old"><small>'+n+' days ago</small>'+esc(o.text)+'</div>';
+  }
+  return h;
+}
+function wire(){
+  patterns.querySelectorAll('[data-r]').forEach(function(b){b.onclick=function(){rangeDays=parseInt(b.getAttribute('data-r'),10);renderPatterns()}});
+}
+
+var backup=$('backup');
+function renderBackup(){
+  backup.innerHTML='<h2 style="margin-top:4px">Back up your thoughts</h2><p class="note" style="margin-top:0">'+thoughts.length+' thoughts saved on this device. Copy a backup and keep it somewhere safe, like a note to yourself.</p><div class="range"><button id="b-copy">Copy backup</button><button id="b-file">Download file</button></div><h2>Restore</h2><p class="note" style="margin-top:0">Paste a backup below. Thoughts already here are kept and new ones are added.</p><textarea id="b-text" rows="6" style="flex:none;width:100%;max-height:none;border-radius:12px" placeholder="Paste backup here" aria-label="Backup text"></textarea><div class="range" style="margin-top:8px"><button id="b-restore">Restore thoughts</button></div><p class="note" id="b-msg" role="status"></p>';
+  var ta=$('b-text'),msg=function(s){$('b-msg').textContent=s};
+  function dump(){return JSON.stringify({app:'luna',version:1,thoughts:thoughts})}
+  $('b-copy').onclick=function(){
+    var j=dump();ta.value=j;ta.select();
+    try{navigator.clipboard.writeText(j).then(function(){msg('Copied. Paste it somewhere safe.')},function(){msg('Select the text in the box and copy it.')})}catch(e){msg('Select the text in the box and copy it.')}
+  };
+  $('b-file').onclick=function(){
+    try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dump()],{type:'application/json'}));a.download='luna-backup.json';document.body.appendChild(a);a.click();a.remove();msg('If nothing downloaded, use Copy backup instead.')}catch(e){msg('Download isn’t available here. Use Copy backup instead.')}
+  };
+  $('b-restore').onclick=function(){
+    var data;try{data=JSON.parse(ta.value)}catch(e){msg('That doesn’t look like a Luna backup.');return}
+    var list=Array.isArray(data)?data:(data&&data.thoughts);
+    if(!Array.isArray(list)){msg('That doesn’t look like a Luna backup.');return}
+    var have={};thoughts.forEach(function(t){have[t.id]=1});var added=0;
+    list.forEach(function(t){
+      if(!t||typeof t.text!=='string'||typeof t.ts!=='number')return;
+      var id=t.id||(t.ts+'-'+Math.random().toString(36).slice(2,6));
+      if(have[id])return;have[id]=1;thoughts.push({id:id,text:t.text,ts:t.ts});added++;
+    });
+    thoughts.sort(function(a,b){return a.ts-b.ts});save();
+    msg(added+' thoughts added.');
+  };
+}
+function show(tab){
+  var isT=tab==='thread';
+  thread.classList.toggle('hidden',!isT);patterns.classList.toggle('hidden',tab!=='patterns');backup.classList.toggle('hidden',tab!=='backup');composer.classList.toggle('hidden',!isT);
+  ['thread','patterns','backup'].forEach(function(n){$('t-'+n).setAttribute('aria-selected',n===tab)});
+  if(isT){renderThread()}else if(tab==='patterns'){renderPatterns()}else{renderBackup()}
+}
+$('t-thread').onclick=function(){show('thread')};
+$('t-patterns').onclick=function(){show('patterns')};
+$('t-backup').onclick=function(){show('backup')};
+renderThread();
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+</script>
+</body>
+</html>
