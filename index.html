@@ -35,6 +35,11 @@ textarea{flex:1;resize:none;border:1px solid var(--line);background:var(--surfac
 textarea:focus{outline:2px solid var(--bubble);outline-offset:1px}
 .send{width:42px;height:42px;border-radius:50%;border:0;background:var(--bubble);color:var(--bubble-ink);font-size:20px;font-weight:800;flex:none}
 .send:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.search{padding:0 16px 6px}
+.search input{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:9px 16px;font:16px inherit;font-family:inherit}
+.search input:focus{outline:2px solid var(--bubble);outline-offset:1px}
+mark{background:var(--accent);color:#1E1838;border-radius:3px;padding:0 1px}
+.count{align-self:center;color:var(--mute);font-size:12px;margin:6px 0}
 .hidden{display:none!important}
 .range{display:flex;gap:6px;margin-bottom:14px}
 .range button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 12px;font:600 13px inherit;font-family:inherit}
@@ -69,6 +74,7 @@ h2{font-size:15px;margin:18px 0 8px}
   </div>
 </header>
 
+<div class="search" id="search"><input type="search" id="q" placeholder="Search thoughts" aria-label="Search thoughts" autocomplete="off"></div>
 <main id="thread" aria-live="polite"></main>
 <main id="patterns" class="hidden"></main>
 <main id="backup" class="hidden"></main>
@@ -96,18 +102,29 @@ function dayLabel(ts){
 }
 function timeLabel(ts){return new Date(ts).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}
 
+var query='';
+function terms(){return query.toLowerCase().split(/\s+/).filter(Boolean)}
+function matches(t){var tx=t.text.toLowerCase();return terms().every(function(w){return tx.indexOf(w)>-1})}
+function fill(el,text){
+  var ts=terms();if(!ts.length){el.textContent=text;return}
+  var re=new RegExp('('+ts.map(function(w){return w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}).join('|')+')','gi');
+  text.split(re).forEach(function(p,i){if(i%2){var m=document.createElement('mark');m.textContent=p;el.appendChild(m)}else if(p){el.appendChild(document.createTextNode(p))}});
+}
 function renderThread(){
   thread.innerHTML='';
+  var list=query?thoughts.filter(matches):thoughts;
+  if(query&&!list.length){thread.innerHTML='<div class="empty"><b>No matches.</b>Nothing you\u2019ve sent contains that.</div>';return}
+  if(query){var c=document.createElement('div');c.className='count';c.textContent=list.length+(list.length===1?' thought':' thoughts');thread.appendChild(c)}
   if(!thoughts.length){
     thread.innerHTML='<div class="empty"><b>Talk to the moon.</b>Send the small thoughts as they come. No folders, no titles. Luna keeps them, and patterns show up later.</div>';
     return;
   }
   var last='';
-  thoughts.forEach(function(t){
+  list.forEach(function(t){
     var dl=dayLabel(t.ts);
     if(dl!==last){var s=document.createElement('div');s.className='day';s.textContent=dl;thread.appendChild(s);last=dl}
     var m=document.createElement('div');m.className='msg';
-    var b=document.createElement('div');b.className='bubble';b.textContent=t.text;
+    var b=document.createElement('div');b.className='bubble';fill(b,t.text);
     var meta=document.createElement('div');meta.className='meta';meta.textContent=timeLabel(t.ts);
     var del=document.createElement('button');del.textContent='Delete';
     del.onclick=function(e){e.stopPropagation();thoughts=thoughts.filter(function(x){return x.id!==t.id});save();renderThread()};
@@ -121,8 +138,9 @@ function renderThread(){
 function addThought(){
   var text=input.value.trim();if(!text)return;
   thoughts.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,6),text:text,ts:Date.now()});
-  save();input.value='';input.style.height='auto';renderThread();input.focus();
+  save();input.value='';input.style.height='auto';query='';$('q').value='';renderThread();input.focus();
 }
+$('q').addEventListener('input',function(){query=$('q').value.trim();renderThread()});
 $('send').onclick=addThought;
 input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&window.matchMedia('(hover:hover)').matches){e.preventDefault();addThought()}});
 input.addEventListener('input',function(){input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px'});
@@ -235,7 +253,7 @@ function renderBackup(){
 }
 function show(tab){
   var isT=tab==='thread';
-  thread.classList.toggle('hidden',!isT);patterns.classList.toggle('hidden',tab!=='patterns');backup.classList.toggle('hidden',tab!=='backup');composer.classList.toggle('hidden',!isT);
+  thread.classList.toggle('hidden',!isT);$('search').classList.toggle('hidden',!isT);patterns.classList.toggle('hidden',tab!=='patterns');backup.classList.toggle('hidden',tab!=='backup');composer.classList.toggle('hidden',!isT);
   ['thread','patterns','backup'].forEach(function(n){$('t-'+n).setAttribute('aria-selected',n===tab)});
   if(isT){renderThread()}else if(tab==='patterns'){renderPatterns()}else{renderBackup()}
 }
