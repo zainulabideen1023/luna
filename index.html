@@ -6,6 +6,7 @@
 <title>Luna</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#3B2F8F">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
 <style>
@@ -24,7 +25,7 @@ h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.02em}
 main{flex:1;overflow-y:auto;padding:8px 16px 12px;display:flex;flex-direction:column}
 .day{align-self:center;color:var(--mute);font-size:12px;margin:14px 0 6px}
 .msg{align-self:flex-end;max-width:82%;margin:3px 0;text-align:right}
-.bubble{display:inline-block;background:var(--bubble);color:var(--bubble-ink);padding:9px 14px;border-radius:20px 20px 6px 20px;font-size:16px;line-height:1.35;text-align:left;white-space:pre-wrap;word-break:break-word}
+.bubble{display:inline-block;background:var(--bubble);color:var(--bubble-ink);padding:9px 14px;border-radius:20px 20px 6px 20px;font-size:16px;line-height:1.35;text-align:start;white-space:pre-wrap;word-break:break-word}
 .meta{font-size:11px;color:var(--mute);margin:2px 4px 0;display:none}
 .msg.open .meta{display:block}
 .meta button{border:0;background:none;color:var(--mute);text-decoration:underline;font:inherit;padding:0 0 0 8px}
@@ -62,6 +63,10 @@ h2{font-size:15px;margin:18px 0 8px}
 .old{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;line-height:1.4}
 .old small{display:block;color:var(--mute);margin-bottom:4px}
 .recur{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.banner{margin:0 16px 8px;padding:10px 14px;border:1px solid var(--accent);border-radius:14px;background:var(--surface);color:var(--ink);font-size:14px;line-height:1.4}
+.banner button{border:0;background:none;color:inherit;font:700 14px inherit;font-family:inherit;text-decoration:underline;padding:0 0 0 10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);z-index:5}
+.toast button{border:0;background:none;color:inherit;font:800 14px inherit;font-family:inherit;text-decoration:underline;padding:0}
 </style>
 </head>
 <body>
@@ -73,24 +78,89 @@ h2{font-size:15px;margin:18px 0 8px}
     <button role="tab" id="t-backup" aria-selected="false">Backup</button>
   </div>
 </header>
+<div class="banner hidden" id="banner" role="alert"></div>
 
-<div class="search" id="search"><input type="search" id="q" placeholder="Search thoughts" aria-label="Search thoughts" autocomplete="off"></div>
+<div class="search" id="search"><input type="search" id="q" dir="auto" placeholder="Search thoughts" aria-label="Search thoughts" autocomplete="off"></div>
 <main id="thread" aria-live="polite"></main>
 <main id="patterns" class="hidden"></main>
 <main id="backup" class="hidden"></main>
 
 <div class="composer" id="composer">
-  <textarea id="input" rows="1" placeholder="Tell Luna what’s on your mind" aria-label="Write a thought"></textarea>
+  <textarea id="input" rows="1" dir="auto" placeholder="Tell Luna what’s on your mind" aria-label="Write a thought"></textarea>
   <button class="send" id="send" aria-label="Save thought">↑</button>
 </div>
 
+<div class="toast hidden" id="toast" role="status"></div>
+
 <script>
-var KEY='mindchat:thoughts';
-var thoughts=[];
-try{var raw=localStorage.getItem(KEY);if(raw)thoughts=JSON.parse(raw)||[]}catch(e){thoughts=[]}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(thoughts))}catch(e){}}
+/* Store: the only place that touches browser storage. A native app swaps this object out. */
+var Store={
+  KEY:'mindchat:thoughts',
+  BAD:'mindchat:thoughts:unreadable',
+  VERSION:1,
+  problem:'',
+  valid:function(t){return !!t&&typeof t.text==='string'&&typeof t.ts==='number'&&isFinite(t.ts)},
+  load:function(){
+    var raw=null;
+    try{raw=localStorage.getItem(this.KEY)}catch(e){this.problem='blocked';return[]}
+    if(!raw)return[];
+    try{var d=JSON.parse(raw);if(Array.isArray(d))return d.filter(this.valid)}catch(e){}
+    try{localStorage.setItem(this.BAD,raw)}catch(e){}
+    this.problem='unreadable';return[];
+  },
+  save:function(list){try{localStorage.setItem(this.KEY,JSON.stringify(list));return true}catch(e){return false}},
+  rescue:function(){try{return localStorage.getItem(this.BAD)}catch(e){return null}},
+  persist:function(){try{if(navigator.storage&&navigator.storage.persist)return navigator.storage.persist().catch(function(){return false})}catch(e){}return Promise.resolve(false)},
+  isPersisted:function(){try{if(navigator.storage&&navigator.storage.persisted)return navigator.storage.persisted().catch(function(){return null})}catch(e){}return Promise.resolve(null)},
+  /* Backup format v1: {app:'luna',version:1,exportedAt:ms,thoughts:[{id,text,ts}]}. See DECISIONS.md. */
+  exportJSON:function(list){return JSON.stringify({app:'luna',version:this.VERSION,exportedAt:Date.now(),thoughts:list})},
+  parse:function(text){
+    var data;try{data=JSON.parse(text)}catch(e){return null}
+    var list=Array.isArray(data)?data:(data&&data.thoughts);
+    if(!Array.isArray(list))return null;
+    return {list:list,version:(data&&data.version)||1};
+  },
+  merge:function(into,list){
+    var have={},added=0,self=this;into.forEach(function(t){have[t.id]=1});
+    list.forEach(function(t){
+      if(!self.valid(t))return;
+      var id=t.id||(t.ts+'-'+Math.random().toString(36).slice(2,6));
+      if(have[id])return;have[id]=1;into.push({id:id,text:t.text,ts:t.ts});added++;
+    });
+    return added;
+  }
+};
+var thoughts=Store.load();
 
 var $=function(id){return document.getElementById(id)};
+
+var bannerEl=$('banner'),bannerKind='';
+function hideBanner(){bannerKind='';bannerEl.classList.add('hidden')}
+function showBanner(kind,msg,dismissable){
+  bannerKind=kind;bannerEl.innerHTML='';
+  var s=document.createElement('span');s.textContent=msg;bannerEl.appendChild(s);
+  if(dismissable){var b=document.createElement('button');b.textContent='Dismiss';b.onclick=hideBanner;bannerEl.appendChild(b)}
+  bannerEl.classList.remove('hidden');
+}
+function save(){
+  var ok=Store.save(thoughts);
+  if(ok){if(bannerKind==='save')hideBanner()}
+  else showBanner('save','Couldn\u2019t save to this device. New thoughts may be lost when you close Luna. Open Backup and copy your thoughts now.',false);
+  return ok;
+}
+if(Store.problem==='unreadable')showBanner('load','Luna couldn\u2019t read your saved thoughts, so it started empty. The unreadable data was kept on this device (see Backup).',true);
+else if(Store.problem==='blocked')showBanner('load','Your browser is blocking storage, so Luna can\u2019t keep thoughts here. Try a normal, non-private window.',true);
+
+var toastEl=$('toast'),toastTimer=null;
+function hideToast(){clearTimeout(toastTimer);toastEl.classList.add('hidden')}
+function toast(msg,label,fn){
+  clearTimeout(toastTimer);toastEl.innerHTML='';
+  var s=document.createElement('span');s.textContent=msg;toastEl.appendChild(s);
+  if(label){var b=document.createElement('button');b.textContent=label;b.onclick=function(){hideToast();fn()};toastEl.appendChild(b)}
+  toastEl.classList.remove('hidden');
+  toastTimer=setTimeout(hideToast,6000);
+}
+var persistAsked=false;
 var thread=$('thread'),patterns=$('patterns'),input=$('input'),composer=$('composer');
 var rangeDays=7;
 
@@ -124,10 +194,14 @@ function renderThread(){
     var dl=dayLabel(t.ts);
     if(dl!==last){var s=document.createElement('div');s.className='day';s.textContent=dl;thread.appendChild(s);last=dl}
     var m=document.createElement('div');m.className='msg';
-    var b=document.createElement('div');b.className='bubble';fill(b,t.text);
+    var b=document.createElement('div');b.className='bubble';b.setAttribute('dir','auto');fill(b,t.text);
     var meta=document.createElement('div');meta.className='meta';meta.textContent=timeLabel(t.ts);
     var del=document.createElement('button');del.textContent='Delete';
-    del.onclick=function(e){e.stopPropagation();thoughts=thoughts.filter(function(x){return x.id!==t.id});save();renderThread()};
+    del.onclick=function(e){
+      e.stopPropagation();
+      thoughts=thoughts.filter(function(x){return x.id!==t.id});save();renderThread();
+      toast('Thought deleted','Undo',function(){thoughts.push(t);thoughts.sort(function(a,b){return a.ts-b.ts});save();renderThread()});
+    };
     meta.appendChild(del);
     b.onclick=function(){m.classList.toggle('open')};
     m.appendChild(b);m.appendChild(meta);thread.appendChild(m);
@@ -138,7 +212,7 @@ function renderThread(){
 function addThought(){
   var text=input.value.trim();if(!text)return;
   thoughts.push({id:Date.now()+'-'+Math.random().toString(36).slice(2,6),text:text,ts:Date.now()});
-  save();input.value='';input.style.height='auto';query='';$('q').value='';renderThread();input.focus();
+  save();if(!persistAsked){persistAsked=true;Store.persist()}input.value='';input.style.height='auto';query='';$('q').value='';renderThread();input.focus();
 }
 $('q').addEventListener('input',function(){query=$('q').value.trim();renderThread()});
 $('send').onclick=addThought;
@@ -146,6 +220,9 @@ input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&wi
 input.addEventListener('input',function(){input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px'});
 
 var STOP=new Set('the a an and or but if then so to of in on at for with from by is are was were be been being it its this that these those i me my mine we our you your he she they them his her their not no yes do does did done have has had will would can could should just like get got really very about into out up down over than too also what when where who how why which there here as am im ive dont cant its thats because maybe still more some any all one much want need think feel know going gonna thing things'.split(' '));
+
+'ہے ہیں تھا تھی تھے ہو ہوں ہوا ہوئی ہوتا ہوتی ہوتے کا کی کے کو سے میں پر اور یہ وہ نہیں بھی تو کہ ایک اس ان کر کرنا کرنے کیا کیوں جو جب مجھے مجھ میرا میری میرے ہم ہمارا آپ لیے لئے ساتھ بہت گیا گئی گئے رہا رہی رہے سکتا سکتی کچھ اب پھر لیکن کسی کوئی نے ہی تک والا والی والے دیا دی دیے جاتا جاتی'.split(' ').forEach(function(w){STOP.add(w)});
+'hai hain tha thi the hoon hota hoti kya kyun kyunke nahi nahin mujhe mujh mera meri mere hum aap yeh woh aur mein toh bohat bahut kuch abhi phir lekin koi kisi liye saath gaya gayi raha rahi rahe sakta sakti aaj'.split(' ').forEach(function(w){STOP.add(w)});
 
 function streak(){
   var days={};thoughts.forEach(function(t){days[new Date(t.ts).toDateString()]=1});
@@ -166,10 +243,10 @@ function renderPatterns(){
   var hours=new Array(24).fill(0),freq={},words=0;
   set.forEach(function(t){
     hours[new Date(t.ts).getHours()]++;
-    var ws=t.text.toLowerCase().replace(/[^a-z\u00c0-\u024f'\s]/g,' ').split(/\s+/).filter(Boolean);
+    var ws=clean(t.text);
     words+=ws.length;
     var seen={};
-    ws.forEach(function(w){w=w.replace(/'/g,'');if(w.length<4||STOP.has(w)||seen[w])return;seen[w]=1;freq[w]=(freq[w]||0)+1});
+    ws.forEach(function(w){if(!keep(w)||seen[w])return;seen[w]=1;freq[w]=(freq[w]||0)+1});
   });
   var peak=hours.indexOf(Math.max.apply(null,hours));
   var peakLabel=new Date(2000,0,1,peak).toLocaleTimeString(undefined,{hour:'numeric'});
@@ -179,15 +256,18 @@ function renderPatterns(){
   html+='<div class="stats"><div class="stat"><b>'+set.length+'</b><span>thoughts</span></div><div class="stat"><b>'+streak()+'</b><span>day streak</span></div><div class="stat"><b>'+Math.round(words/set.length)+'</b><span>words each</span></div></div>';
   html+='<h2>You think most around '+peakLabel+'</h2><div class="bars" aria-hidden="true">'+hours.map(function(h){return '<i style="height:'+Math.max(3,h/maxH*100)+'%"></i>'}).join('')+'</div><div class="axis"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>';
   html+='<h2>Words that keep coming back</h2>';
-  html+=top.length?'<div class="words">'+top.map(function(w){return '<span class="chip">'+w+' · '+freq[w]+'</span>'}).join('')+'</div>':'<div class="note" style="margin-top:0">No repeats yet. Recurring words will show up here.</div>';
-  html+=extras(set);html+='<p class="note">All of this is counted on your phone from your own words. Tone is a simple word-list estimate, so treat it as a rough hint.</p>';
+  html+=top.length?'<div class="words">'+top.map(function(w){return '<span class="chip" dir="auto">'+esc(w)+' · '+freq[w]+'</span>'}).join('')+'</div>':'<div class="note" style="margin-top:0">No repeats yet. Recurring words will show up here.</div>';
+  html+=extras(set);html+='<p class="note">All of this is counted on your phone from your own words. Tone is a simple English word-list estimate (it can\u2019t read Urdu yet), so treat it as a rough hint.</p>';
   patterns.innerHTML=html;wire();
 }
 var POS=new Set('good great happy love loved excited grateful glad proud calm hope hopeful fun enjoy enjoyed nice better best win wonderful beautiful relaxed peaceful motivated inspired thankful amazing awesome laugh curious'.split(' '));
 var NEG=new Set('bad sad angry anxious anxiety worried worry stressed stress tired exhausted lonely afraid scared fear hate hated annoyed frustrated overwhelmed stuck guilty regret ashamed worse worst hurt cry crying hard difficult confused doubt dread burnout drained'.split(' '));
-function clean(t){return t.toLowerCase().replace(/[^a-z\u00c0-\u024f\s]/g,' ').split(/\s+/).filter(Boolean)}
+/* Words in any script: letters and combining marks only. Apostrophes are dropped from inside words. */
+function clean(t){return t.toLowerCase().replace(/[^\p{L}\p{M}'\u2019\s]/gu,' ').split(/\s+/).map(function(w){return w.replace(/['\u2019]/g,'')}).filter(Boolean)}
+/* Worth counting: not a stopword, and long enough (4+ letters in Latin script, 3+ in others). */
+function keep(w){return !STOP.has(w)&&w.length>=(/[^\u0000-\u024f]/.test(w)?3:4)}
 function tone(t){var s=0;clean(t).forEach(function(w){if(POS.has(w))s++;else if(NEG.has(w))s--});return s}
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function extras(set){
   var h='',sc=set.map(function(t){return tone(t.text)});
   var up=sc.filter(function(x){return x>0}).length,dn=sc.filter(function(x){return x<0}).length,fl=set.length-up-dn;
@@ -198,12 +278,12 @@ function extras(set){
     var a=avg(sc.slice(0,mid)),b=avg(sc.slice(mid)),d=b-a;
     h+='<p class="insight">'+(Math.abs(d)<0.15?'Your tone has stayed steady across this stretch.':d>0?'Your recent thoughts lean more upbeat than your earlier ones.':'Your recent thoughts lean heavier than your earlier ones.')+'</p>';
   }
-  var q=set.filter(function(t){return t.text.indexOf('?')>-1}).length;
+  var q=set.filter(function(t){return /[?\u061f]/.test(t.text)}).length;
   h+='<p class="insight">'+Math.round(q/set.length*100)+'% of your thoughts are questions.</p>';
   var days={},pairs={};
   set.forEach(function(t){
     var dk=new Date(t.ts).toDateString(),ws=clean(t.text),seen={};
-    ws.forEach(function(w){w=w.replace(/'/g,'');if(w.length<4||STOP.has(w))return;(days[w]=days[w]||{})[dk]=1});
+    ws.forEach(function(w){if(!keep(w))return;(days[w]=days[w]||{})[dk]=1});
     for(var i=0;i<ws.length-1;i++){
       var x=ws[i],y=ws[i+1];
       if(x.length<3||y.length<3||STOP.has(x)||STOP.has(y))continue;
@@ -211,13 +291,14 @@ function extras(set){
     }
   });
   var loops=Object.keys(days).map(function(w){return [w,Object.keys(days[w]).length]}).filter(function(r){return r[1]>=3}).sort(function(a,b){return b[1]-a[1]}).slice(0,6);
-  if(loops.length){h+='<h2>Loops: topics on 3+ different days</h2>'+loops.map(function(r){return '<div class="recur"><span>'+r[0]+'</span><span>'+r[1]+' days</span></div>'}).join('')}
+  if(loops.length){h+='<h2>Loops: topics on 3+ different days</h2>'+loops.map(function(r){return '<div class="recur"><span dir="auto">'+esc(r[0])+'</span><span>'+r[1]+' days</span></div>'}).join('')}
   var ph=Object.keys(pairs).filter(function(p){return pairs[p]>1}).sort(function(a,b){return pairs[b]-pairs[a]}).slice(0,8);
-  if(ph.length){h+='<h2>Phrases you repeat</h2><div class="words">'+ph.map(function(p){return '<span class="chip">'+p+' · '+pairs[p]+'</span>'}).join('')+'</div>'}
+  if(ph.length){h+='<h2>Phrases you repeat</h2><div class="words">'+ph.map(function(p){return '<span class="chip" dir="auto">'+esc(p)+' · '+pairs[p]+'</span>'}).join('')+'</div>'}
   var old=thoughts.filter(function(t){return Date.now()-t.ts>3*864e5});
   if(old.length){
-    var o=old[Math.floor(Math.random()*old.length)],n=Math.round((Date.now()-o.ts)/864e5);
-    h+='<h2>From your past</h2><div class="old"><small>'+n+' days ago</small>'+esc(o.text)+'</div>';
+    var dn=new Date(),seed=dn.getFullYear()*10000+(dn.getMonth()+1)*100+dn.getDate();
+    var o=old[(Math.imul(seed,2654435761)>>>0)%old.length],n=Math.round((Date.now()-o.ts)/864e5);
+    h+='<h2>From your past</h2><div class="old"><small>'+n+' days ago</small><div dir="auto">'+esc(o.text)+'</div></div>';
   }
   return h;
 }
@@ -226,10 +307,13 @@ function wire(){
 }
 
 var backup=$('backup');
+function countText(){return thoughts.length+(thoughts.length===1?' thought':' thoughts')+' saved on this device. Copy a backup and keep it somewhere safe, like a note to yourself.'}
 function renderBackup(){
-  backup.innerHTML='<h2 style="margin-top:4px">Back up your thoughts</h2><p class="note" style="margin-top:0">'+thoughts.length+' thoughts saved on this device. Copy a backup and keep it somewhere safe, like a note to yourself.</p><div class="range"><button id="b-copy">Copy backup</button><button id="b-file">Download file</button></div><h2>Restore</h2><p class="note" style="margin-top:0">Paste a backup below. Thoughts already here are kept and new ones are added.</p><textarea id="b-text" rows="6" style="flex:none;width:100%;max-height:none;border-radius:12px" placeholder="Paste backup here" aria-label="Backup text"></textarea><div class="range" style="margin-top:8px"><button id="b-restore">Restore thoughts</button></div><p class="note" id="b-msg" role="status"></p>';
+  backup.innerHTML='<h2 style="margin-top:4px">Back up your thoughts</h2><p class="note" id="b-count" style="margin-top:0">'+countText()+'</p><p class="note" id="b-persist" style="margin-top:0"></p><div class="range"><button id="b-copy">Copy backup</button><button id="b-file">Download file</button></div><h2>Restore</h2><p class="note" style="margin-top:0">Paste a backup below. Thoughts already here are kept and new ones are added.</p><textarea id="b-text" rows="6" style="flex:none;width:100%;max-height:none;border-radius:12px" placeholder="Paste backup here" aria-label="Backup text"></textarea><div class="range" style="margin-top:8px"><button id="b-restore">Restore thoughts</button></div><p class="note" id="b-msg" role="status"></p>'+(Store.rescue()?'<h2>Unreadable data</h2><p class="note" style="margin-top:0">Luna kept a copy of data it couldn\u2019t read. Show it, copy it, and keep it safe.</p><div class="range"><button id="b-rescue">Show unreadable data</button></div>':'');
+  Store.isPersisted().then(function(p){var el=$('b-persist');if(!el)return;el.textContent=p===true?'This device protects Luna\u2019s storage from automatic clearing.':p===false?'Your browser may clear Luna\u2019s storage if the device runs low on space, so back up regularly.':''});
   var ta=$('b-text'),msg=function(s){$('b-msg').textContent=s};
-  function dump(){return JSON.stringify({app:'luna',version:1,thoughts:thoughts})}
+  function dump(){return Store.exportJSON(thoughts)}
+  if($('b-rescue'))$('b-rescue').onclick=function(){ta.value=Store.rescue()||'';ta.select()};
   $('b-copy').onclick=function(){
     var j=dump();ta.value=j;ta.select();
     try{navigator.clipboard.writeText(j).then(function(){msg('Copied. Paste it somewhere safe.')},function(){msg('Select the text in the box and copy it.')})}catch(e){msg('Select the text in the box and copy it.')}
@@ -238,20 +322,17 @@ function renderBackup(){
     try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dump()],{type:'application/json'}));a.download='luna-backup.json';document.body.appendChild(a);a.click();a.remove();msg('If nothing downloaded, use Copy backup instead.')}catch(e){msg('Download isn’t available here. Use Copy backup instead.')}
   };
   $('b-restore').onclick=function(){
-    var data;try{data=JSON.parse(ta.value)}catch(e){msg('That doesn’t look like a Luna backup.');return}
-    var list=Array.isArray(data)?data:(data&&data.thoughts);
-    if(!Array.isArray(list)){msg('That doesn’t look like a Luna backup.');return}
-    var have={};thoughts.forEach(function(t){have[t.id]=1});var added=0;
-    list.forEach(function(t){
-      if(!t||typeof t.text!=='string'||typeof t.ts!=='number')return;
-      var id=t.id||(t.ts+'-'+Math.random().toString(36).slice(2,6));
-      if(have[id])return;have[id]=1;thoughts.push({id:id,text:t.text,ts:t.ts});added++;
-    });
-    thoughts.sort(function(a,b){return a.ts-b.ts});save();
-    msg(added+' thoughts added.');
+    var p=Store.parse(ta.value);
+    if(!p){msg('That doesn’t look like a Luna backup.');return}
+    var added=Store.merge(thoughts,p.list);
+    thoughts.sort(function(a,b){return a.ts-b.ts});
+    var ok=save();
+    msg(added+(added===1?' thought':' thoughts')+' added.'+(p.version>Store.VERSION?' This backup is from a newer version of Luna, so some details may be ignored.':'')+(ok?'':' Luna couldn’t save to this device, so copy a backup now.'));
+    $('b-count').textContent=countText();
   };
 }
 function show(tab){
+  hideToast();
   var isT=tab==='thread';
   thread.classList.toggle('hidden',!isT);$('search').classList.toggle('hidden',!isT);patterns.classList.toggle('hidden',tab!=='patterns');backup.classList.toggle('hidden',tab!=='backup');composer.classList.toggle('hidden',!isT);
   ['thread','patterns','backup'].forEach(function(n){$('t-'+n).setAttribute('aria-selected',n===tab)});
