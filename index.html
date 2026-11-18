@@ -67,6 +67,9 @@ h2{font-size:15px;margin:18px 0 8px}
 .banner button{border:0;background:none;color:inherit;font:700 14px inherit;font-family:inherit;text-decoration:underline;padding:0 0 0 10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;max-width:calc(100% - 32px);z-index:5}
 .toast button{border:0;background:none;color:inherit;font:800 14px inherit;font-family:inherit;text-decoration:underline;padding:0}
+.tag{border:0;background:none;color:inherit;font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:2px;padding:0;cursor:pointer}
+.tag.hit{background:var(--accent);color:#1E1838;border-radius:3px;text-decoration:none;padding:0 2px}
+button.chip{font:inherit;cursor:pointer}
 </style>
 </head>
 <body>
@@ -80,7 +83,7 @@ h2{font-size:15px;margin:18px 0 8px}
 </header>
 <div class="banner hidden" id="banner" role="alert"></div>
 
-<div class="search" id="search"><input type="search" id="q" dir="auto" placeholder="Search thoughts" aria-label="Search thoughts" autocomplete="off"></div>
+<div class="search" id="search"><input type="search" id="q" dir="auto" placeholder="Search thoughts or #tags" aria-label="Search thoughts" autocomplete="off"></div>
 <main id="thread" aria-live="polite"></main>
 <main id="patterns" class="hidden"></main>
 <main id="backup" class="hidden"></main>
@@ -174,11 +177,53 @@ function timeLabel(ts){return new Date(ts).toLocaleTimeString(undefined,{hour:'n
 
 var query='';
 function terms(){return query.toLowerCase().split(/\s+/).filter(Boolean)}
-function matches(t){var tx=t.text.toLowerCase();return terms().every(function(w){return tx.indexOf(w)>-1})}
+/* Tags: a # followed by letters/digits, at the start of the text or after a space or punctuation.
+   The first group in the pattern is the character before the #, so "C#" and "page#2" are not tags. */
+var TAGRE=/(^|[^\p{L}\p{M}\p{N}_#])#([\p{L}\p{M}\p{N}_]+)/gu;
+/* Split a thought into plain pieces and tag pieces, in order. */
+function parts(text){
+  var out=[],last=0,m;TAGRE.lastIndex=0;
+  while((m=TAGRE.exec(text))){
+    if(!/\p{L}/u.test(m[2]))continue;           /* "#1" is a number, not a tag */
+    var start=m.index+m[1].length,end=m.index+m[0].length;
+    if(start>last)out.push({s:text.slice(last,start)});
+    out.push({s:text.slice(start,end),tag:m[2].toLowerCase()});
+    last=end;
+  }
+  if(last<text.length)out.push({s:text.slice(last)});
+  return out;
+}
+/* The tags in a thought, lowercase, no repeats. #Idea and #idea are the same tag. */
+function tagsOf(text){
+  var seen={},list=[];
+  parts(text).forEach(function(p){if(p.tag&&!seen[p.tag]){seen[p.tag]=1;list.push(p.tag)}});
+  return list;
+}
+/* The thought with its tags removed, for counting ordinary words. */
+function plain(text){return parts(text).filter(function(p){return !p.tag}).map(function(p){return p.s}).join(' ')}
+function isTagTerm(w){return w.charAt(0)==='#'&&w.length>1}
+/* A search term like #idea must match a tag exactly. Other terms match anywhere in the text. */
+function matches(t){
+  var tx=t.text.toLowerCase(),tg=null;
+  return terms().every(function(w){
+    if(isTagTerm(w)){tg=tg||tagsOf(t.text);return tg.indexOf(w.slice(1))>-1}
+    return tx.indexOf(w)>-1;
+  });
+}
+function hl(parent,str,re){
+  if(!re){parent.appendChild(document.createTextNode(str));return}
+  str.split(re).forEach(function(p,i){if(i%2){var m=document.createElement('mark');m.textContent=p;parent.appendChild(m)}else if(p){parent.appendChild(document.createTextNode(p))}});
+}
 function fill(el,text){
-  var ts=terms();if(!ts.length){el.textContent=text;return}
-  var re=new RegExp('('+ts.map(function(w){return w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}).join('|')+')','gi');
-  text.split(re).forEach(function(p,i){if(i%2){var m=document.createElement('mark');m.textContent=p;el.appendChild(m)}else if(p){el.appendChild(document.createTextNode(p))}});
+  var ts=terms(),words=ts.filter(function(w){return !isTagTerm(w)}),hit=ts.filter(isTagTerm).map(function(w){return w.slice(1)});
+  var re=words.length?new RegExp('('+words.map(function(w){return w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}).join('|')+')','gi'):null;
+  parts(text).forEach(function(p){
+    if(!p.tag){hl(el,p.s,re);return}
+    var b=document.createElement('button');b.type='button';b.className='tag'+(hit.indexOf(p.tag)>-1?' hit':'');
+    hl(b,p.s,re);
+    b.onclick=function(e){e.stopPropagation();query='#'+p.tag;$('q').value=query;renderThread()};
+    el.appendChild(b);
+  });
 }
 function renderThread(){
   thread.innerHTML='';
@@ -186,7 +231,7 @@ function renderThread(){
   if(query&&!list.length){thread.innerHTML='<div class="empty"><b>No matches.</b>Nothing you\u2019ve sent contains that.</div>';return}
   if(query){var c=document.createElement('div');c.className='count';c.textContent=list.length+(list.length===1?' thought':' thoughts');thread.appendChild(c)}
   if(!thoughts.length){
-    thread.innerHTML='<div class="empty"><b>Talk to the moon.</b>Send the small thoughts as they come. No folders, no titles. Luna keeps them, and patterns show up later.</div>';
+    thread.innerHTML='<div class="empty"><b>Talk to the moon.</b>Send the small thoughts as they come. No folders, no titles. Add a #tag if you want to group them. Luna keeps them, and patterns show up later.</div>';
     return;
   }
   var last='';
@@ -243,7 +288,7 @@ function renderPatterns(){
   var hours=new Array(24).fill(0),freq={},words=0;
   set.forEach(function(t){
     hours[new Date(t.ts).getHours()]++;
-    var ws=clean(t.text);
+    var ws=clean(plain(t.text));
     words+=ws.length;
     var seen={};
     ws.forEach(function(w){if(!keep(w)||seen[w])return;seen[w]=1;freq[w]=(freq[w]||0)+1});
@@ -254,11 +299,22 @@ function renderPatterns(){
   var maxH=Math.max.apply(null,hours);
 
   html+='<div class="stats"><div class="stat"><b>'+set.length+'</b><span>thoughts</span></div><div class="stat"><b>'+streak()+'</b><span>day streak</span></div><div class="stat"><b>'+Math.round(words/set.length)+'</b><span>words each</span></div></div>';
+  html+=tagsHtml(set);
   html+='<h2>You think most around '+peakLabel+'</h2><div class="bars" aria-hidden="true">'+hours.map(function(h){return '<i style="height:'+Math.max(3,h/maxH*100)+'%"></i>'}).join('')+'</div><div class="axis"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>';
   html+='<h2>Words that keep coming back</h2>';
   html+=top.length?'<div class="words">'+top.map(function(w){return '<span class="chip" dir="auto">'+esc(w)+' · '+freq[w]+'</span>'}).join('')+'</div>':'<div class="note" style="margin-top:0">No repeats yet. Recurring words will show up here.</div>';
   html+=extras(set);html+='<p class="note">All of this is counted on your phone from your own words. Tone is a simple English word-list estimate (it can\u2019t read Urdu yet), so treat it as a rough hint.</p>';
   patterns.innerHTML=html;wire();
+}
+/* The "Your tags" section: each tag in this date range with the number of thoughts that use it. */
+function tagsHtml(set){
+  var count={};
+  set.forEach(function(t){tagsOf(t.text).forEach(function(g){count[g]=(count[g]||0)+1})});
+  var list=Object.keys(count).sort(function(a,b){return count[b]-count[a]||(a<b?-1:1)}).slice(0,15);
+  var h='<h2>Your tags</h2>';
+  if(list.length)return h+'<div class="words">'+list.map(function(g){return '<button class="chip" data-tag="'+esc(g)+'" dir="auto">#'+esc(g)+' \u00b7 '+count[g]+'</button>'}).join('')+'</div>';
+  var any=thoughts.some(function(t){return tagsOf(t.text).length});
+  return h+'<div class="note" style="margin-top:0">'+(any?'No tags in this range.':'Add #tags to your thoughts, like #idea or #worry, and they will be grouped here.')+'</div>';
 }
 var POS=new Set('good great happy love loved excited grateful glad proud calm hope hopeful fun enjoy enjoyed nice better best win wonderful beautiful relaxed peaceful motivated inspired thankful amazing awesome laugh curious'.split(' '));
 var NEG=new Set('bad sad angry anxious anxiety worried worry stressed stress tired exhausted lonely afraid scared fear hate hated annoyed frustrated overwhelmed stuck guilty regret ashamed worse worst hurt cry crying hard difficult confused doubt dread burnout drained'.split(' '));
@@ -282,7 +338,7 @@ function extras(set){
   h+='<p class="insight">'+Math.round(q/set.length*100)+'% of your thoughts are questions.</p>';
   var days={},pairs={};
   set.forEach(function(t){
-    var dk=new Date(t.ts).toDateString(),ws=clean(t.text),seen={};
+    var dk=new Date(t.ts).toDateString(),ws=clean(plain(t.text)),seen={};
     ws.forEach(function(w){if(!keep(w))return;(days[w]=days[w]||{})[dk]=1});
     for(var i=0;i<ws.length-1;i++){
       var x=ws[i],y=ws[i+1];
@@ -303,13 +359,14 @@ function extras(set){
   return h;
 }
 function wire(){
+  patterns.querySelectorAll('[data-tag]').forEach(function(b){b.onclick=function(){query='#'+b.getAttribute('data-tag');$('q').value=query;show('thread')}});
   patterns.querySelectorAll('[data-r]').forEach(function(b){b.onclick=function(){rangeDays=parseInt(b.getAttribute('data-r'),10);renderPatterns()}});
 }
 
 var backup=$('backup');
 function countText(){return thoughts.length+(thoughts.length===1?' thought':' thoughts')+' saved on this device. Copy a backup and keep it somewhere safe, like a note to yourself.'}
 function renderBackup(){
-  backup.innerHTML='<h2 style="margin-top:4px">Back up your thoughts</h2><p class="note" id="b-count" style="margin-top:0">'+countText()+'</p><p class="note" id="b-persist" style="margin-top:0"></p><div class="range"><button id="b-copy">Copy backup</button><button id="b-file">Download file</button></div><h2>Restore</h2><p class="note" style="margin-top:0">Paste a backup below. Thoughts already here are kept and new ones are added.</p><textarea id="b-text" rows="6" style="flex:none;width:100%;max-height:none;border-radius:12px" placeholder="Paste backup here" aria-label="Backup text"></textarea><div class="range" style="margin-top:8px"><button id="b-restore">Restore thoughts</button></div><p class="note" id="b-msg" role="status"></p>'+(Store.rescue()?'<h2>Unreadable data</h2><p class="note" style="margin-top:0">Luna kept a copy of data it couldn\u2019t read. Show it, copy it, and keep it safe.</p><div class="range"><button id="b-rescue">Show unreadable data</button></div>':'');
+  backup.innerHTML='<h2 style="margin-top:4px">Back up your thoughts</h2><p class="note" id="b-count" style="margin-top:0">'+countText()+'</p><p class="note" id="b-persist" style="margin-top:0"></p><div class="range"><button id="b-copy">Copy backup</button><button id="b-file">Download file</button></div><h2>Restore</h2><p class="note" style="margin-top:0">Choose a backup file, or paste a backup below. Thoughts already here are kept and new ones are added.</p><div class="range"><button id="b-pick">Choose backup file</button></div><input type="file" id="b-in" class="hidden" accept=".json,application/json,text/plain" aria-label="Backup file"><textarea id="b-text" rows="6" style="flex:none;width:100%;max-height:none;border-radius:12px" placeholder="Paste backup here" aria-label="Backup text"></textarea><div class="range" style="margin-top:8px"><button id="b-restore">Restore thoughts</button></div><p class="note" id="b-msg" role="status"></p>'+(Store.rescue()?'<h2>Unreadable data</h2><p class="note" style="margin-top:0">Luna kept a copy of data it couldn\u2019t read. Show it, copy it, and keep it safe.</p><div class="range"><button id="b-rescue">Show unreadable data</button></div>':'');
   Store.isPersisted().then(function(p){var el=$('b-persist');if(!el)return;el.textContent=p===true?'This device protects Luna\u2019s storage from automatic clearing.':p===false?'Your browser may clear Luna\u2019s storage if the device runs low on space, so back up regularly.':''});
   var ta=$('b-text'),msg=function(s){$('b-msg').textContent=s};
   function dump(){return Store.exportJSON(thoughts)}
@@ -321,14 +378,27 @@ function renderBackup(){
   $('b-file').onclick=function(){
     try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dump()],{type:'application/json'}));a.download='luna-backup.json';document.body.appendChild(a);a.click();a.remove();msg('If nothing downloaded, use Copy backup instead.')}catch(e){msg('Download isn’t available here. Use Copy backup instead.')}
   };
-  $('b-restore').onclick=function(){
-    var p=Store.parse(ta.value);
-    if(!p){msg('That doesn’t look like a Luna backup.');return}
+  /* Restore from backup text, whether it was pasted or read from a file. */
+  function restoreFrom(text,label){
+    var p=Store.parse(text);
+    if(!p){msg((label?label+': ':'')+'That doesn’t look like a Luna backup.');return}
     var added=Store.merge(thoughts,p.list);
     thoughts.sort(function(a,b){return a.ts-b.ts});
     var ok=save();
-    msg(added+(added===1?' thought':' thoughts')+' added.'+(p.version>Store.VERSION?' This backup is from a newer version of Luna, so some details may be ignored.':'')+(ok?'':' Luna couldn’t save to this device, so copy a backup now.'));
+    msg((label?label+': ':'')+added+(added===1?' thought':' thoughts')+' added.'+(p.version>Store.VERSION?' This backup is from a newer version of Luna, so some details may be ignored.':'')+(ok?'':' Luna couldn’t save to this device, so copy a backup now.'));
     $('b-count').textContent=countText();
+  }
+  $('b-restore').onclick=function(){restoreFrom(ta.value,'')};
+  $('b-pick').onclick=function(){$('b-in').click()};
+  $('b-in').onchange=function(){
+    var input=this,f=input.files&&input.files[0];
+    if(!f)return;
+    input.value='';                                   /* lets the same file be chosen again later */
+    if(f.size>20e6){msg('That file is too big to be a Luna backup.');return}
+    var r=new FileReader();
+    r.onload=function(){restoreFrom(String(r.result),f.name)};
+    r.onerror=function(){msg('Luna couldn’t read that file.')};
+    r.readAsText(f);
   };
 }
 function show(tab){

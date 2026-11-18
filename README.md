@@ -7,6 +7,7 @@
 ## Features
 
 - **Thread:** write thoughts like messages. Tap a message to delete it (you can undo for a few seconds).
+- **Tags:** add `#idea` or `#worry` to any thought. Tap a tag to see everything with it; Patterns counts them.
 - **Search:** filter your thoughts as you type, with highlighted matches.
 - **Patterns:** thought count, streak, the hours you think most, repeated words and phrases, topics that return across days, a rough tone estimate, and an occasional thought from your past.
 - **Backup:** copy or download all your thoughts and restore them later, on any device.
@@ -38,7 +39,7 @@ Notes for iOS:
 ## Back up and restore
 
 - **Backup → Copy backup**, then paste it somewhere safe such as a note to yourself.
-- To restore, open **Backup**, paste it into the box, and tap **Restore thoughts**. Thoughts already in Luna are kept and new ones are added.
+- To restore, open **Backup** and tap **Choose backup file** (a `.json` file from **Download file**), or paste a backup into the box and tap **Restore thoughts**. Thoughts already in Luna are kept and new ones are added.
 
 ## How the analysis works
 
@@ -59,7 +60,6 @@ Luna counts things; it doesn't understand them. Repeated words, phrases and topi
 
 ## Roadmap
 
-- Tags (`#idea`, `#worry`) grouped in Patterns
 - Daily recap
 - Optional analysis with a language model of your choice, including local models
 - Native Android app

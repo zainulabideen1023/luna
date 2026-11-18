@@ -2,6 +2,15 @@
 
 Newest first. When `index.html` changes, bump the cache version in `sw.js` and note it here.
 
+## v4 (cache `luna-v4`) - 2026-11-19
+- Tags: write `#idea` or `#worry` in any thought. Tags show as tappable words in the thread; tapping one filters to that tag.
+- Searching `#idea` matches that exact tag (not `#ideal`). Other search words work as before.
+- Patterns has a "Your tags" section with a count per tag; tap a tag to see its thoughts.
+- Tag words are left out of the repeated words, loops and phrases lists so they aren't listed twice. They still count toward tone.
+- Tags work in Urdu and any other script. `#Idea` and `#idea` are the same tag.
+- Backup: new "Choose backup file" button restores from a saved `.json` file, using the same rules as pasting (thoughts already here are kept, new ones added). Rejects non-backup files and files over 20 MB with a clear message.
+- No data changes: tags are read from the text, so old thoughts and backups work as before.
+
 ## v3 (cache `luna-v3`) - 2026-11-19
 - Storage now goes through one `Store` object (load, save, export, parse, merge), so a native app can swap it out.
 - Saving no longer fails silently: a banner warns when storage is full or blocked.
